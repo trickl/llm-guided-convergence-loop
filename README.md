@@ -32,4 +32,4 @@ This repository documents the pattern, why it works, and how to apply it to comm
 
 ## License
 
-Add your chosen license file (e.g., MIT) at the repository root.
+This methodology is distributed under the MIT License.
