@@ -1,130 +1,137 @@
-# LLM-Guided Convergence Loop
+# LLM Guided Convergence Loop
 
-This repository explores a structured approach to using Large Language Models (LLMs) for complex problem-solving tasks—particularly code patching—by decomposing the task into a sequence of focused stages with feedback between each step.
+A practical methodology for working with large language models (LLMs) using explicit, iterative refinement rather than one-shot prompting — when correctness, minimality, and reliability matter more than convenience.
 
-The central idea is that LLMs perform significantly better when they are guided through **an explicit loop** rather than asked to diagnose, reason, and act in a single prompt.
+The core idea is simple: treat LLM outputs (plans, patches, analyses, summaries) as *proposals* that improve through constrained iteration. This makes outcomes more reliable, more inspectable, and easier to debug — especially when using smaller or cheaper models.
 
----
-
-## Motivation
-
-LLMs are powerful, but they are not reliable when used monolithically.
-
-In particular, they struggle when asked to:
-- interpret an error
-- infer root causes
-- propose fixes
-- and emit patches
-
-all at once.
-
-Once an LLM commits to an early interpretation, it tends to defend and elaborate that interpretation—even when it is incorrect.
-
-This repository explores how **decomposition and iteration** can be used to extract the maximum benefit from LLMs while mitigating those weaknesses.
+This repository documents a simple but powerful idea: LLM outputs should be treated as provisional artifacts that improve through guided iteration, not as final answers generated in a single prompt.
 
 ---
 
-## The Core Idea: The Loop
+## Why This Exists
 
-Instead of a single prompt, we structure problem-solving as a loop of smaller, narrowly scoped stages.
+If you have ever experienced any of the following:
 
-At a high level, the loop looks like this:
+- LLM-generated patches that almost work, but subtly break things
+- Large, unfocused diffs when you asked for a small fix
+- Plausible explanations that collapse under closer inspection
+- Strong results from flagship models, followed by poor results from smaller ones
+- Difficulty understanding why a model produced a particular answer
 
-1. **Interpret**  
-   Interpret external feedback (e.g. compiler errors, test failures) without proposing fixes.
+…then this repository is for you.
 
-2. **Diagnose**  
-   Form a hypothesis about the underlying cause of the failure.
-
-3. **Propose**  
-   Describe the intent of a change that would address the diagnosis.
-
-4. **Patch**  
-   Emit a concrete patch implementing that intent.
-
-5. **Validate**  
-   Apply the patch and observe the new feedback.
-
-6. **Refine or Repeat**  
-   Use the new information to refine the diagnosis or restart the loop.
-
-By separating these concerns, each LLM invocation has a clear objective and a narrower search space.
+The core problem is not model quality.  
+It is the mental model most people use when interacting with LLMs.
 
 ---
 
-## Why Decomposition Works
+## The One-Shot Fallacy
 
-This staged loop improves outcomes because it aligns with LLM strengths:
+Many failures stem from asking an LLM to do too much at once:
 
-- focused reasoning over small scopes
-- local consistency within a single step
-- responsiveness to explicit feedback
+> “Here is the error and the code. Fix it.”
 
-It also makes failures easier to inspect, since each step has a clearly defined responsibility.
+This forces the model to simultaneously:
 
----
+- interpret the problem
+- locate the cause
+- decide on a fix
+- apply constraints implicitly
+- emit a formally correct artifact
 
-## Refinement Alone Is Not Enough
-
-In practice, decomposition and iteration solve many problems—but not all.
-
-A key limitation emerges once the loop runs for multiple iterations:
-
-> **LLMs tend to strongly commit to early diagnoses.**
-
-When this happens, the loop continues to run, but each iteration merely refines or defends the same incorrect hypothesis. Patches fail, errors remain unchanged, yet the diagnosis persists.
-
-This failure mode is referred to here as **hypothesis lock-in**.
+Errors compound silently, and debugging becomes guesswork.
 
 ---
 
-## Avoiding Hypothesis Lock-In
+## What This Pattern Changes
 
-To preserve the benefits of decomposition while avoiding stagnation, the loop must treat diagnoses as **explicit, replaceable hypotheses**, rather than as assumptions that silently persist across iterations.
+The Guided Convergence Loop replaces one-shot prompting with explicit, inspectable steps.
 
-The loop is therefore augmented with the following structural constraints:
+It externalises reasoning that is often hidden inside advanced “reasoning models” and makes it usable, debuggable, and reliable — even with smaller or cheaper models.
 
-- Each diagnosis is treated as a discrete hypothesis
-- Each patch corresponds to exactly one hypothesis
-- Hypotheses must be falsifiable by observable outcomes
-- Repeated failure weakens or rejects hypotheses
-- Patches must introduce meaningful structural change
-- Stalled iterations force exploration of alternatives
-
-These safeguards operate at the level of **process**, not language or syntax, and therefore scale across domains.
+This turns LLMs from brittle answer generators into collaborative components in a controlled process.
 
 ---
 
-## What This Loop Optimizes For
+## What This Helps With
 
-The convergence loop is designed to maximize:
+The Guided Convergence Loop is especially useful for tasks where precision matters:
 
-- the usefulness of each LLM call
-- the signal extracted from external feedback
-- the ability to recover from incorrect assumptions
-- the likelihood of eventual convergence on a valid solution
+- Fixing compiler or runtime errors with minimal patches
+- Generating diffs that must apply cleanly
+- Diagnosing failures before changing code
+- Planning multi-step engineering work
+- Building LLM-driven tools that must be reliable, testable, and cost-efficient
 
-It does not attempt to encode:
-- programming language rules
-- grammar knowledge
-- domain-specific semantics
+This pattern is less about creativity, and more about engineering discipline applied to LLMs.
 
-Those remain external sources of feedback.
+---
+
+## The Loop
+
+The Guided Convergence Loop pattern is an explicit sequence of phases:
+
+- **Interpret** — explain what the input means (e.g. an error message, a failing test, a requirement)
+- **Propose** — generate a candidate solution or approach, often in prose
+- **Constrain** — apply explicit scope, format, and correctness constraints
+- **Critique** — evaluate the proposal against constraints and objective signals
+- **Refine** — update the artifact to address critique with minimal additional change
+- **Converge** — repeat until acceptance criteria are met, or fail fast with a clear diagnosis
+
+Each phase reduces uncertainty and makes the next step safer.
+
+---
+
+## A Discovered Limitation: Hypothesis Lock-In
+
+In practice, applying the loop reveals a second-order failure mode.
+
+Once an LLM forms an initial diagnosis, it may continue to refine and defend that diagnosis even when external feedback contradicts it. The loop continues to run, but progress stalls.
+
+This is referred to as *hypothesis lock-in*.
+
+---
+
+## Refining the Loop
+
+To address this, diagnoses should be treated as explicit, replaceable hypotheses rather than implicit assumptions that persist across iterations.
+
+In practice, this means:
+
+- making diagnoses explicit
+- tying each refinement to a single hypothesis
+- requiring observable signals that can falsify a hypothesis
+- weakening or rejecting hypotheses that repeatedly fail
+
+These refinements preserve the original loop while ensuring it remains self-correcting.
+
+---
+
+## What This Is (and Is Not)
+
+This is a design pattern / methodology for building LLM-driven tools and workflows.
+
+It is not:
+- a library or framework
+- a model benchmark
+- a prompting cookbook
+- dependent on any specific vendor or model
+
+It is compatible with both human-in-the-loop and fully automated workflows.
 
 ---
 
 ## Repository Structure
 
-- `examples/`  
-  Conceptual guides and patterns demonstrating how to apply the loop.
+- `pattern.md` — the canonical definition of the loop
+- `philosophy.md` — the underlying mental model and rationale
+- `examples/` — applied workflows (patching, diagnosis, planning)
+- `comparisons/` — common failure modes and why one-shot prompting is brittle
 
-- `examples/code-patching.md`  
-  A focused description of iterative, hypothesis-driven code patching and the safeguards required to avoid lock-in.
+You can adopt the entire loop, or just individual phases, depending on your needs.
 
 ---
 
-## Guiding Principle
+## License
 
-> The power of this approach lies not in asking LLMs better questions, but in asking them *smaller*, *more disciplined* ones—repeatedly, with feedback.
-
-This repository explores how to do that systematically.
+MIT License — use freely, adapt as needed.
