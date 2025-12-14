@@ -1,91 +1,116 @@
-# Example: Code Patching from a Compiler Error
+# Guided Code Patching via Iterative Refinement
 
-## Scenario
+Large Language Models (LLMs) perform poorly when asked to diagnose, solve, and patch a code issue in a single step. This is not primarily due to a lack of knowledge, but due to premature convergence on a single explanation that is then defended and elaborated upon.
 
-You have a compilation error such as:
+This document describes a language-agnostic refinement loop for code patching and highlights the structural safeguards required to ensure convergence toward correct solutions.
 
-- `Unexpected identifier at line 171`
-- or a type error
-- or a missing symbol error
+---
 
-Goal: produce a minimal patch that removes the error and preserves behaviour.
+## Why Single-Pass Patching Fails
 
-## Inputs
+A single-pass approach typically asks the model to:
 
-- Error message (and stack trace if present)
-- Target language and build tool (e.g., Java + Maven)
-- Code context:
-  - prefer a **focused window** around the error location (e.g., ±30–80 lines)
-  - plus any referenced declarations if outside the window
+1. Interpret an error
+2. Diagnose a cause
+3. Propose a fix
+4. Emit a patch
 
-## Loop Template
+Once a diagnosis is selected, the model tends to preserve it, even when contradictory evidence emerges. Subsequent reasoning is often devoted to justifying or refining the initial hypothesis rather than reassessing it.
 
-### Step 1 — Interpret (no code)
-Ask:
-- “Explain what this error typically means and what kinds of causes it implies.”
+This behavior leads to internally consistent but incorrect results.
 
-Output:
-- plain-language meaning
-- likely causes
-- what evidence would distinguish causes
+---
 
-### Step 2 — Localise and Diagnose (focused code only)
-Ask:
-- “Given the error and this code region, identify the most likely cause in this specific context.”
+## Refinement Improves Outcomes—But Is Not Sufficient
 
-Output:
-- the precise construct likely triggering the error
-- why it is invalid in the given language/syntax
+Decomposing the task into multiple steps (interpretation, diagnosis, patching, validation) improves clarity and allows feedback to be incorporated between iterations.
 
-### Step 3 — Propose (prose only)
-Ask:
-- “Propose the minimal conceptual change to resolve the cause above. Do not write code yet.”
+However, **refinement alone does not guarantee convergence**.
 
-Output:
-- a small change described as intent
+Without explicit mechanisms for rejecting incorrect hypotheses, a refinement loop can repeatedly reinforce the same mistake—producing more detailed explanations without making progress toward a valid solution.
 
-### Step 4 — Constrain
-Add explicit constraints, for example:
-- “Do not reformat unrelated code.”
-- “Do not rename symbols.”
-- “Change only within this method unless strictly necessary.”
-- “Prefer the smallest valid diff.”
+---
 
-### Step 5 — Generate Patch (first diff)
-Ask:
-- “Produce a unified diff implementing exactly the proposal under the constraints.”
+## Common Failure Mode: Hypothesis Lock-In
 
-Output:
-- a minimal patch
+A frequent failure mode in iterative patching systems is *hypothesis lock-in*:
 
-### Step 6 — Critique (machine + model)
-Run deterministic checks:
-- does the patch apply?
-- does it compile?
-- did the error disappear?
-- lines changed / hunks count / files touched
+- an early diagnosis is treated as correct
+- subsequent steps refine or defend that diagnosis
+- failed patches do not weaken or replace the hypothesis
+- the loop cycles without producing new information
 
-Optionally ask the LLM:
-- “Critique this diff against the constraints. Identify any non-essential changes.”
+> Refinement without falsification produces consistency, not correctness.
 
-### Step 7 — Refine
-Ask:
-- “Revise the diff to address the critique and reduce scope.”
+---
 
-Repeat until acceptance criteria are met.
+## Refinement Loop Invariants
 
-## Acceptance Criteria
+To reliably converge in a language-agnostic setting, the refinement loop must enforce the following invariants.
 
-- Patch applies cleanly
-- Compilation succeeds (or at least the target error is removed)
-- Diff is minimal and targeted
-- No unrelated changes
+### 1. Explicit Hypotheses
 
-## Common Failure Modes
+Each diagnosis must be represented as a discrete, explicit hypothesis rather than free-form narrative text.
 
-- Incorrect anchoring (context doesn’t match file)
-- Overreach (large refactors unrelated to the error)
-- Underreach (patch doesn’t address root cause)
-- Oscillation (alternates between two imperfect fixes)
+A hypothesis should minimally include:
+- a concise claim
+- the code region it applies to
+- an expected observable effect if corrected
 
-In all cases: force smaller steps, tighter constraints, and stronger checks.
+---
+
+### 2. One Hypothesis per Patch
+
+Each patch proposal must correspond to exactly one hypothesis.
+
+Patches that attempt to address multiple ideas at once obscure causality and make validation difficult.
+
+---
+
+### 3. Mandatory Falsifiability
+
+Every hypothesis must be falsifiable.
+
+Before proposing a patch, the loop must identify at least one observable outcome that would contradict the hypothesis (for example: unchanged error output, unchanged location, or failed patch application).
+
+Hypotheses that cannot be falsified are not actionable.
+
+---
+
+### 4. Structural Change Requirement
+
+Each patch must introduce a meaningful **structural change** to the failing region, such as:
+- regrouping
+- changes in nesting
+- scope modification
+- ordering changes
+
+Superficial edits that do not alter structure are strong indicators of weak or incorrect hypotheses.
+
+---
+
+### 5. Hypothesis Weakening and Rejection
+
+If multiple patch attempts consistent with the same hypothesis fail to produce new information, that hypothesis must be weakened or rejected.
+
+Refinement must not imply indefinite persistence.
+
+---
+
+## Added Loop Step: Hypothesis Falsification
+
+Before generating a patch, the loop must explicitly answer:
+
+- What observable outcome would contradict this hypothesis?
+- Has a prior iteration already contradicted it?
+- Would the proposed patch change the structure of the failing construct?
+
+If any of these questions cannot be answered satisfactorily, the hypothesis should be discarded and replaced.
+
+---
+
+## Key Takeaway
+
+A successful guided convergence loop is not defined by how well it refines ideas, but by how effectively it abandons incorrect ones.
+
+Decomposition enables progress, but falsification ensures direction.
